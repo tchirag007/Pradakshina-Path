@@ -20,9 +20,10 @@ const STORAGE_KEY_HISTORY = 'pradakshina_history';
 const STORAGE_KEY_CURRENT_SESSION = 'pradakshina_current_session';
 
 function App() {
-  // --- State ---
+  // --- State with Lazy Initialization for Persistence ---
+  
+  // 1. Current Count
   const [currentCount, setCurrentCount] = useState<number>(() => {
-    // Initialize from local storage if available
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(STORAGE_KEY_CURRENT_SESSION);
       return saved ? parseInt(saved, 10) : 0;
@@ -30,8 +31,32 @@ function App() {
     return 0;
   });
   
-  const [totalLifetimeCount, setTotalLifetimeCount] = useState<number>(0);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  // 2. Total Lifetime Count
+  const [totalLifetimeCount, setTotalLifetimeCount] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const savedStats = localStorage.getItem(STORAGE_KEY_STATS);
+      if (savedStats) {
+        try {
+          return JSON.parse(savedStats).totalRounds || 0;
+        } catch (e) { return 0; }
+      }
+    }
+    return 0;
+  });
+
+  // 3. History
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    if (typeof window !== 'undefined') {
+      const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
+      if (savedHistory) {
+        try {
+          return JSON.parse(savedHistory);
+        } catch (e) { return []; }
+      }
+    }
+    return [];
+  });
+
   const [activeModal, setActiveModal] = useState<ModalType>(ModalType.NONE);
   const [isAnimating, setIsAnimating] = useState(false);
   const [manualInput, setManualInput] = useState<string>('');
@@ -57,25 +82,12 @@ function App() {
     }
   }, []);
 
-  // 2. Persist current session count whenever it changes
+  // 2. Persist state changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_CURRENT_SESSION, currentCount.toString());
   }, [currentCount]);
 
   useEffect(() => {
-    // Load data on mount
-    const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
-    const savedStats = localStorage.getItem(STORAGE_KEY_STATS);
-
-    if (savedHistory) setHistory(JSON.parse(savedHistory));
-    if (savedStats) {
-      const stats = JSON.parse(savedStats);
-      setTotalLifetimeCount(stats.totalRounds || 0);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Save total count whenever it changes (derived from history usually, but we track separate lifetime total for simplicity)
     const stats = { totalRounds: totalLifetimeCount };
     localStorage.setItem(STORAGE_KEY_STATS, JSON.stringify(stats));
   }, [totalLifetimeCount]);
@@ -151,9 +163,11 @@ function App() {
   };
 
   const handleClearHistory = () => {
-    setHistory([]);
-    setTotalLifetimeCount(0);
-    setActiveModal(ModalType.NONE);
+    if(window.confirm("Are you sure? This will delete all history and reset the lifetime counter.")) {
+      setHistory([]);
+      setTotalLifetimeCount(0);
+      setActiveModal(ModalType.NONE);
+    }
   };
 
   const handleShare = async () => {
@@ -198,7 +212,7 @@ function App() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-gray-900/90 text-white px-6 py-2 rounded-full shadow-lg text-sm animate-fade-in-up backdrop-blur-sm">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-gray-900/90 text-white px-6 py-2 rounded-full shadow-lg text-sm animate-fade-in-up backdrop-blur-sm pointer-events-none">
           {toastMessage}
         </div>
       )}
